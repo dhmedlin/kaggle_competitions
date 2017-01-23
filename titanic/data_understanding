@@ -1,0 +1,95 @@
+setwd("~/Documents/R files") #set working directory
+
+library_loading <- c("ggplot2", "mice", "VIM", "stringr", "data.table", "randomForest", "e1071", "dplyr")
+lapply(library_loading, require, character.only = T) #load packages
+
+train.iceberg <- read.csv("titanic_train.csv", na.strings = c(""))
+test.iceberg <- read.csv("titanic_test.csv", na.strings = c("")) #import data
+
+is.data.frame(train.iceberg)
+is.data.frame(test.iceberg) #test to see if they are dfs
+
+test.iceberg$Survived <- NA #create survived column in test df
+
+total.iceberg <- rbind(train.iceberg, test.iceberg) #row bind the two dfs
+
+describe(total.iceberg)
+str(total.iceberg) #structure of the data
+
+#data type changes
+
+total.iceberg$Survived <- as.factor(total.iceberg$Survived) #change from int to factor
+total.iceberg$Pclass <- as.factor(total.iceberg$Pclass) #change from int to factor
+total.iceberg$Name <- as.character(total.iceberg$Name) #change from factor to char
+total.iceberg$Ticket <- as.character(total.iceberg$Ticket) #change from factor to char
+total.iceberg$Cabin <- as.character(total.iceberg$Cabin) #change from factor to char
+
+#rerun str() to check that the type changes worked
+
+#feature engineering
+
+#surname
+
+total.iceberg["Surname"] <- NA #create surname variable
+total.iceberg$Surname <- gsub('\\,.*', "", total.iceberg$Name) #add data
+
+class(total.iceberg$Surname) #type of variable
+total.iceberg$Surname <- as.factor(total.iceberg$Surname) #change from char to factor
+
+#title
+
+total.iceberg["Title"] <- NA #create title variable
+total.iceberg$Title <- str_sub(total.iceberg$Name, str_locate(total.iceberg$Name, ",")
+                               [ , 1] + 2,str_locate(total.iceberg$Name, "\\.")[ , 1] - 1) #add data
+
+table(total.iceberg$Title) #table of titles
+
+class(total.iceberg$Title) #type of variable
+#total.iceberg$Title <- as.factor(total.iceberg$Title) #change from char to factor
+
+str(total.iceberg) #check types of all variables
+
+#Some titles are rare
+
+#Break title down by gender and create a rare title type for each gender
+
+table(total.iceberg$Sex, total.iceberg$Title) #gender by title table
+
+total.iceberg$Title[total.iceberg$Title %in% c("Dona", "Lady", "the Countess", "Capt","Col", "Don", "Jonkheer", "Major", "Rev", "Sir", "Dr")] <- "Rare"
+#data for rare title types
+
+#recode certain variables
+
+total.iceberg$Title[total.iceberg$Title %in% c("Ms", "Mlle")] <- "Miss"
+#ms is another verison of miss and mlle is the french version of miss
+
+total.iceberg$Title[total.iceberg$Title %in% c("Mme")] <- "Mrs"
+#mme is the french verison of mrs
+
+table(total.iceberg$Sex, total.iceberg$Title) #gender by title table again
+
+#missing values
+
+summary(is.na(total.iceberg))
+
+#the following have missing data: survived, age, sibsp, fare, cabin, and embarked
+#survived is not "missing" because it the variable that will be predicted
+
+#What percentage of data is missing for each variable?
+
+#If a variable has greater than 30% missing data, sources list different ranges from 5 to 50% depending on the data, ...
+#the variable will be dropped. If the variable has less than 30% missing data imputation will be done for that variable.
+
+missing.perct <- function(x){sum(is.na(x))/length(x)*100} #missing percentage formula
+apply(total.iceberg, 2, missing.perct)
+
+#Cabin has 77% missing values it will dropped
+#age, fare, and embarked will be imputed
+
+total.iceberg$Cabin <- NULL #drop cabin variable
+
+md.pattern(total.iceberg) #missing data pattern
+
+miss.plot <- aggr(total.iceberg, col=c('darkseagreen1','fire brick'), bars = TRUE, numbers=TRUE, sortVars=TRUE, 
+                  labels=names(total.iceberg), cex.axis = .65, gap=2, 
+                  ylabs=c("Proportion of Missing Data", "Combinations of Missing Data")) #missing data plot
