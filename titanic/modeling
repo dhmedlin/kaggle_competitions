@@ -1,0 +1,39 @@
+#---------------------------------------------------------------
+#MODELING
+
+#Split data into train and test
+
+train.final <- mice_output[1:891,]
+test.final <- mice_output[892:1309,] 
+
+#Change class level variable names
+
+train.final$Pclass[train.final$Pclass=="1"] <- "one"
+train.final$Pclass[train.final$Pclass=="2"] <- "two"
+train.final$Pclass[train.final$Pclass=="3"] <- "three"
+
+train.final$Pclass <- as.factor(train.final$Pclass) #change from char to factor
+
+train.final$Survived[train.final$Survived=="0"] <- "Dead"
+train.final$Survived[train.final$Survived=="1"] <- "Alive"
+
+train.final$Survived <- as.factor(train.final$Survived) #change from char to factor
+
+str(train.final)
+
+#stacking
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3, savePredictions="final", classProbs=TRUE)
+algorithmList <- c('knn', 'svmRadial')
+set.seed(337)
+models <- caretList(Survived ~ Pclass+Sex+Age+SibSp+Parch+Fare+Embarked+Title, 
+                    data=train.final, trControl = control, methodList=algorithmList)
+results <- resamples(models)
+summary(results)
+dotplot(results)
+
+#correlation between algorithms
+
+modelCor(results) 
+
+splom(results) #scatter plot matrix of correlations
