@@ -1,6 +1,11 @@
+#---------------------------------------------------------------
+#DATA UNDERSTANDING
+
 setwd("~/Documents/R files") #set working directory
 
-library_loading <- c("ggplot2", "mice", "VIM", "stringr", "data.table", "randomForest", "e1071", "dplyr")
+library_loading <- c("ggplot2", "mice", "VIM", "stringr", "data.table", "randomForest", 
+                     "e1071", "dplyr", "Hmisc", "cowplot", "mlbench", "caret" ,
+                     "caretEnsemble", "MASS", "kernlab")
 lapply(library_loading, require, character.only = T) #load packages
 
 train.iceberg <- read.csv("titanic_train.csv", na.strings = c(""))
@@ -16,10 +21,13 @@ total.iceberg <- rbind(train.iceberg, test.iceberg) #row bind the two dfs
 describe(total.iceberg)
 str(total.iceberg) #structure of the data
 
+#---------------------------------------------------------------
+#DATA PREPARATION
+
 #data type changes
 
-total.iceberg$Survived <- as.factor(total.iceberg$Survived) #change from int to factor
-total.iceberg$Pclass <- as.factor(total.iceberg$Pclass) #change from int to factor
+total.iceberg$Survived <- as.character(total.iceberg$Survived) #change from int to char
+total.iceberg$Pclass <- as.character(total.iceberg$Pclass) #change from int to char
 total.iceberg$Name <- as.character(total.iceberg$Name) #change from factor to char
 total.iceberg$Ticket <- as.character(total.iceberg$Ticket) #change from factor to char
 total.iceberg$Cabin <- as.character(total.iceberg$Cabin) #change from factor to char
@@ -44,14 +52,9 @@ total.iceberg$Title <- str_sub(total.iceberg$Name, str_locate(total.iceberg$Name
 
 table(total.iceberg$Title) #table of titles
 
-class(total.iceberg$Title) #type of variable
-#total.iceberg$Title <- as.factor(total.iceberg$Title) #change from char to factor
-
-str(total.iceberg) #check types of all variables
-
 #Some titles are rare
 
-#Break title down by gender and create a rare title type for each gender
+#Break title down by gender and create a rare title type
 
 table(total.iceberg$Sex, total.iceberg$Title) #gender by title table
 
@@ -68,6 +71,11 @@ total.iceberg$Title[total.iceberg$Title %in% c("Mme")] <- "Mrs"
 
 table(total.iceberg$Sex, total.iceberg$Title) #gender by title table again
 
+class(total.iceberg$Title) #type of variable
+total.iceberg$Title <- as.factor(total.iceberg$Title) #change from char to factor
+
+str(total.iceberg) #check types of all variables
+
 #missing values
 
 summary(is.na(total.iceberg))
@@ -77,19 +85,64 @@ summary(is.na(total.iceberg))
 
 #What percentage of data is missing for each variable?
 
-#If a variable has greater than 30% missing data, sources list different ranges from 5 to 50% depending on the data, ...
-#the variable will be dropped. If the variable has less than 30% missing data imputation will be done for that variable.
+#If a variable has a certain amount of missing data it will be dropped...
+#sources list different ranges from 5 - 50% depending on the dataset
+#Imputation will be done on variables with missing data that are kept
 
 missing.perct <- function(x){sum(is.na(x))/length(x)*100} #missing percentage formula
 apply(total.iceberg, 2, missing.perct)
 
-#Cabin has 77% missing values it will dropped
-#age, fare, and embarked will be imputed
+#Cabin has 77% missing values it will dropped after imputation
+#fare and embarked will be imputed
+#age is on the border, but will be kept and imputation will be done
 
-total.iceberg$Cabin <- NULL #drop cabin variable
+aggr(total.iceberg, col=c('darkseagreen1','fire brick'), bars = TRUE, numbers=TRUE, sortVars=TRUE, 
+     labels=names(total.iceberg), cex.axis = .65, gap=2, 
+     ylabs=c("Proportion of Missing Data", "Combinations of Missing Data")) #missing data plot
 
-md.pattern(total.iceberg) #missing data pattern
+#imputation: age and fare
 
-miss.plot <- aggr(total.iceberg, col=c('darkseagreen1','fire brick'), bars = TRUE, numbers=TRUE, sortVars=TRUE, 
-                  labels=names(total.iceberg), cex.axis = .65, gap=2, 
-                  ylabs=c("Proportion of Missing Data", "Combinations of Missing Data")) #missing data plot
+#What type of missing data is present?
+#Assumption: age, fare, and embarked are MCAR
+
+before.imp <- mice(total.iceberg, maxit = 0, pri= F, seed = 99)
+pred.matrix <- before.imp$predictorMatrix
+pred.matrix["Survived",] <- 0
+method1 <- c("", "", "", "", "", "pmm", "", "", "", "pmm", "", "", "", "")
+imp1 <- mice(total.iceberg, method = method1, predictorMatrix = pred.matrix, pri = F, seed = 45, m=5, maxit = 2) 
+#mice imputation of age and fare
+
+summary(imp1)
+
+densityplot(imp1) #age density plot
+
+mice_output <- complete(imp1) #adds mice data to the full df
+
+summary(mice_output) #check to make sure there is no missing data in the age and fare columns
+
+p1 <- ggplot(total.iceberg, aes(Age) ) + 
+  geom_density() +
+  ggtitle("Sepal.Length: Original") 
+#original data  
+
+p2<- ggplot(mice_output, aes(Age) ) + 
+  geom_density() +
+  ggtitle("Sepal.Length: MICE")
+#mice data
+
+plot_grid(p1, p2, align = "h") #original vs mice density plot of age
+
+#imputation: embarked
+
+which(is.na(mice_output$Embarked), arr.ind=TRUE) #find row numbers for the two missing cells in the emmbarked column
+
+summary(mice_output$Embarked) #find the mode
+
+mice_output[62,12] = "S"
+mice_output[830,12] = "S" #fill the two missing cells with the mode
+
+#re-run summary to check the previous two lines of code
+
+#drop cabin variable
+
+mice_output$Cabin <- NULL
